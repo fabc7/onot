@@ -1,39 +1,61 @@
-name: onlyfans-monitor
+import re
+import json
+import os
+import requests
+from playwright.sync_api import sync_playwright
 
-on:
-  schedule:
-    - cron: "*/30 * * * *"
-  workflow_dispatch:
+PROFILE_URL = os.environ.get("PROFILE_URL")
+WEBHOOK = os.environ.get("DISCORD_WEBHOOK")
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+def send_discord(msg):
+    requests.post(WEBHOOK, json={"content": msg})
 
-    permissions:
-      contents: write
+def get_counts():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+        page.goto(PROFILE_URL, timeout=60000)
+        page.wait_for_load_state("networkidle")
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+        text = page.inner_text("body")
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+        photos = re.search(r"(\d+)\s+photos", text)
+        videos = re.search(r"(\d+)\s+videos", text)
 
-      - name: Install Playwright browsers
-        run: playwright install --with-deps
+        browser.close()
 
-      - name: Run bot
-        run: python bot.py
+        photos = int(photos.group(1)) if photos else 0
+        videos = int(videos.group(1)) if videos else 0
 
-      - name: Commit updated counter
-        run: |
-          git config --global user.name "bot"
-          git config --global user.email "bot@users.noreply.github.com"
-          git add count.json
-          git commit -m "update counter" || echo "no changes"
-          git push
+        return photos, videos
+
+def load_previous():
+    try:
+        with open("count.json") as f:
+            return json.load(f)
+    except:
+        return {"total": 0}
+
+def save_current(total):
+    with open("count.json","w") as f:
+        json.dump({"total": total}, f)
+
+def main():
+    if not PROFILE_URL or not WEBHOOK:
+        raise Exception("Faltan variables de entorno")
+
+    photos, videos = get_counts()
+    total = photos + videos
+
+    prev = load_previous()
+    old_total = prev["total"]
+
+    if total > old_total:
+        msg = f"📢 Nuevo contenido detectado\nFotos: {photos}\nVideos: {videos}"
+        send_discord(msg)
+
+    save_current(total)
+
+if __name__ == "__main__":
+    main()
