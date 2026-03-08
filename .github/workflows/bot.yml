@@ -35,6 +35,7 @@ jobs:
         env:
           PROFILE_URL: ${{ secrets.PROFILE_URL }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_USER: ${{ secrets.DISCORD_USER }}
 
       - name: Commit updated counter
         run: |
