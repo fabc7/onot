@@ -22,40 +22,27 @@ def send_discord(msg):
 
 
 def get_counts():
-    log("Iniciando Playwright")
+    print("[BOT] Iniciando Playwright")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
-        log(f"Abriendo perfil: {PROFILE_URL}")
-
+        print(f"[BOT] Abriendo perfil: {PROFILE_URL}")
         page.goto(PROFILE_URL, timeout=60000)
 
-        log("Esperando network idle...")
-        page.wait_for_load_state("networkidle")
+        page.wait_for_selector(".b-profile__sections__count")
 
-        text = page.inner_text("body")
+        print("[BOT] Extrayendo contadores...")
 
-        log("Página cargada, buscando contadores...")
-
-        photos = re.search(r"(\d+)\s+photos", text, re.IGNORECASE)
-        videos = re.search(r"(\d+)\s+videos", text, re.IGNORECASE)
-
-        if photos:
-            log(f"Fotos detectadas: {photos.group(1)}")
-        else:
-            log("No se detectaron fotos")
-
-        if videos:
-            log(f"Videos detectados: {videos.group(1)}")
-        else:
-            log("No se detectaron videos")
+        counts = page.locator(".b-profile__sections__count").all_inner_texts()
 
         browser.close()
 
-        photos = int(photos.group(1)) if photos else 0
-        videos = int(videos.group(1)) if videos else 0
+        print(f"[BOT] Contadores detectados: {counts}")
+
+        photos = int(counts[0]) if len(counts) > 0 else 0
+        videos = int(counts[1]) if len(counts) > 1 else 0
 
         return photos, videos
 
@@ -116,3 +103,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
