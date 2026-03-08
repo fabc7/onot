@@ -1,0 +1,16 @@
+name: Example Bot Workflow
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  example-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Run a script
+        run: echo "Hello from the bot workflow!"
