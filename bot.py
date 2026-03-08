@@ -57,7 +57,7 @@ def main():
 
     if total > old_total:
         msg = (
-            f":ologo: @{DISCORD_USER}\n"
+            f"<:ologo:1480256858844303582> <@{DISCORD_USER}>\n"
             f"📸 {photos}\n"
             f"🎬 {videos}\n"
             f"❤️ {likes}"
@@ -72,3 +72,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
