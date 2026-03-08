@@ -1,4 +1,4 @@
-name: onlyfans-monitor
+name: o-monitor
 
 on:
   schedule:
@@ -36,10 +36,10 @@ jobs:
           PROFILE_URL: ${{ secrets.PROFILE_URL }}
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
-      # - name: Commit updated counter
-      #   run: |
-      #     git config --global user.name "bot"
-      #     git config --global user.email "bot@users.noreply.github.com"
-      #     git add count.json
-      #     git commit -m "update counter" || echo "no changes"
-      #     git push
+      - name: Commit updated counter
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@users.noreply.github.com"
+          git add count.json
+          git commit -m "update counter" || echo "no changes"
+          git push
