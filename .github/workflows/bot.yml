@@ -37,6 +37,12 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           DISCORD_USER: ${{ secrets.DISCORD_USER }}
 
+      - name: Upload debug HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-html
+          path: debug.html
+
       - name: Commit updated counter
         run: |
           git config --global user.name "bot"
