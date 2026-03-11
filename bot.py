@@ -3,6 +3,8 @@ import json
 import os
 import requests
 from playwright.sync_api import sync_playwright
+from playwright_stealth import stealth_sync
+import random
 
 PROFILE_URL = os.environ.get("PROFILE_URL")
 WEBHOOK = os.environ.get("DISCORD_WEBHOOK")
@@ -22,47 +24,59 @@ def get_counts():
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-dev-shm-usage"]
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-infobars",
+                "--window-size=1280,800"
+            ]
         )
 
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 800},
+            locale="en-US",
+            timezone_id="America/Santiago"
         )
 
         page = context.new_page()
+        stealth_sync(page)
 
         log(f"Opening {PROFILE_URL}")
 
-        page.goto(PROFILE_URL, timeout=60000, wait_until="domcontentloaded")
+        # retry loop por si Cloudflare aparece
+        for attempt in range(3):
 
-        # esperar un poco por Vue
-        page.wait_for_timeout(8000)
+            page.goto(PROFILE_URL, timeout=60000, wait_until="domcontentloaded")
 
-        html = page.content()
+            # esperar render JS
+            page.wait_for_timeout(random.randint(6000, 9000))
 
-        # guardar html para debugging
-        with open("debug.html", "w") as f:
-            f.write(html)
+            html = page.content()
 
-        log(f"HTML length: {len(html)}")
+            with open("debug.html", "w") as f:
+                f.write(html)
 
-        # detectar problemas comunes
-        if "Cloudflare" in html:
-            log("Cloudflare detected")
+            log(f"HTML length: {len(html)}")
 
-        if "login" in html.lower():
-            log("Login wall detected")
+            if "Cloudflare" in html or "Just a moment" in html:
+                log(f"Cloudflare detected (attempt {attempt+1})")
+                page.wait_for_timeout(5000)
+                continue
 
-        if "b-profile__sections__count" not in html:
-            log("Counts selector NOT in HTML")
+            if "b-profile__sections__count" not in html:
+                log("Counts selector NOT in HTML")
+                continue
+
+            break
 
         try:
-            page.wait_for_selector(".b-profile__sections__count", timeout=20000)
+            page.wait_for_selector(".b-profile__sections__count", timeout=30000)
         except Exception as e:
             log(f"Selector timeout: {e}")
 
         counts = page.locator(".b-profile__sections__count").all_inner_texts()
-
         log(f"Raw counts: {counts}")
 
         browser.close()
@@ -110,5 +124,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
