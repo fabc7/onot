@@ -3,7 +3,7 @@ import json
 import os
 import requests
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
+from playwright_stealth import stealth
 import random
 
 PROFILE_URL = os.environ.get("PROFILE_URL")
@@ -41,7 +41,7 @@ def get_counts():
         )
 
         page = context.new_page()
-        stealth_sync(page)
+        stealth(page)
 
         log(f"Opening {PROFILE_URL}")
 
@@ -124,6 +124,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
