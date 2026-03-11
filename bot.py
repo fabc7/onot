@@ -20,15 +20,53 @@ def send_discord(msg):
 
 def get_counts():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"]
+        )
 
-        page.goto(PROFILE_URL, timeout=60000)
-        page.wait_for_selector(".b-profile__sections__count")
+        context = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
+        )
+
+        page = context.new_page()
+
+        log(f"Opening {PROFILE_URL}")
+
+        page.goto(PROFILE_URL, timeout=60000, wait_until="domcontentloaded")
+
+        # esperar un poco por Vue
+        page.wait_for_timeout(8000)
+
+        html = page.content()
+
+        # guardar html para debugging
+        with open("debug.html", "w") as f:
+            f.write(html)
+
+        log(f"HTML length: {len(html)}")
+
+        # detectar problemas comunes
+        if "Cloudflare" in html:
+            log("Cloudflare detected")
+
+        if "login" in html.lower():
+            log("Login wall detected")
+
+        if "b-profile__sections__count" not in html:
+            log("Counts selector NOT in HTML")
+
+        try:
+            page.wait_for_selector(".b-profile__sections__count", timeout=20000)
+        except Exception as e:
+            log(f"Selector timeout: {e}")
+
         counts = page.locator(".b-profile__sections__count").all_inner_texts()
 
+        log(f"Raw counts: {counts}")
+
         browser.close()
-        
+
         photos = int(counts[0].strip()) if len(counts) > 0 else 0
         videos = int(counts[1].strip()) if len(counts) > 1 else 0
         likes  = int(counts[2].strip()) if len(counts) > 2 else 0
@@ -72,4 +110,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
