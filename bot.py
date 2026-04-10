@@ -1,133 +1,97 @@
-import json
 import os
+import time
+import json
 import requests
-from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth_sync
 
-PROFILE_URL = os.environ.get("PROFILE_URL")
-WEBHOOK = os.environ.get("DISCORD_WEBHOOK")
-DISCORD_USER = os.environ.get("DISCORD_USER")
+USERNAME = os.getenv("RG_USERNAME")
+WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL")
+STATE_FILE = "state.json"
 
+# =========================
+# Estado
+# =========================
+if os.path.exists(STATE_FILE):
+    with open(STATE_FILE, "r") as f:
+        state = json.load(f)
+else:
+    state = {"last_id": None}
 
-def log(msg):
-    print(f"[BOT] {msg}", flush=True)
+# =========================
+# Token
+# =========================
+def get_token():
+    r = requests.get("https://api.redgifs.com/v2/auth/temporary")
+    return r.json()["token"]
 
+# =========================
+# Obtener gifs
+# =========================
+def get_latest_gifs(token):
+    url = f"https://api.redgifs.com/v2/users/{USERNAME}/search?order=latest"
+    headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(url, headers=headers)
+    return r.json().get("gifs", [])
 
-def send_discord(msg):
-    r = requests.post(WEBHOOK, json={"content": msg})
+# =========================
+# URL gif
+# =========================
+def get_gif_url(gif_id, token):
+    url = f"https://api.redgifs.com/v2/gifs/{gif_id}"
+    headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(url, headers=headers)
+    return r.json()["gif"]["urls"]["hd"]
 
-    log(f"Discord status: {r.status_code}")
-    if r.status_code not in (200, 204):
-        log(f"Discord response: {r.text}")
+# =========================
+# Descargar
+# =========================
+def download_gif(gif_id, url, token):
+    filename = f"{gif_id}.mp4"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "Mozilla/5.0"
+    }
+    
+    with requests.get(url, headers=headers, stream=True) as r:
+        with open(filename, "wb") as f:
+            for chunk in r.iter_content(8192):
+                f.write(chunk)
+    
+    return filename
 
+# =========================
+# Discord
+# =========================
+def send_to_discord(file_path):
+    with open(file_path, "rb") as f:
+        requests.post(WEBHOOK, files={"file": f})
 
-def get_counts():
+# =========================
+# MAIN
+# =========================
+token = get_token()
+gifs = get_latest_gifs(token)
 
-    with sync_playwright() as p:
+new_ids = []
 
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-            ],
-        )
+for gif in gifs:
+    if gif["id"] == state["last_id"]:
+        break
+    new_ids.append(gif["id"])
 
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
-            viewport={"width": 1280, "height": 800},
-        )
+if state["last_id"] is None and gifs:
+    new_ids = [gifs[0]["id"]]
 
-        page = context.new_page()
-
-        # aplicar stealth
-        stealth_sync(page)
-
-        log(f"Opening {PROFILE_URL}")
-
-        for attempt in range(3):
-
-            page.goto(PROFILE_URL, timeout=60000, wait_until="domcontentloaded")
-
-            # esperar render JS
-            page.wait_for_timeout(8000)
-
-            html = page.content()
-
-            with open("debug.html", "w") as f:
-                f.write(html)
-
-            log(f"HTML length: {len(html)}")
-
-            if "Cloudflare" in html or "Just a moment" in html:
-                log(f"Cloudflare detected (attempt {attempt+1})")
-                page.wait_for_timeout(5000)
-                continue
-
-            if "b-profile__sections__count" not in html:
-                log("Counts selector not present")
-                continue
-
-            break
-
-        try:
-            page.wait_for_selector(".b-profile__sections__count", timeout=20000)
-        except Exception as e:
-            log(f"Selector timeout: {e}")
-
-        counts = page.locator(".b-profile__sections__count").all_inner_texts()
-
-        log(f"Raw counts: {counts}")
-
-        browser.close()
-
-        photos = int(counts[0].strip()) if len(counts) > 0 else 0
-        videos = int(counts[1].strip()) if len(counts) > 1 else 0
-        likes = int(counts[2].strip()) if len(counts) > 2 else 0
-
-        return photos, videos, likes
-
-
-def load_previous():
+for gif_id in reversed(new_ids):
     try:
-        with open("count.json") as f:
-            return json.load(f)
-    except Exception as e:
-        log(f"count.json not found ({e})")
-        return {"total": 0}
+        url = get_gif_url(gif_id, token)
+        file_path = download_gif(gif_id, url, token)
+        send_to_discord(file_path)
+        time.sleep(2)
+    except:
+        pass
 
+if gifs:
+    state["last_id"] = gifs[0]["id"]
 
-def save_current(total):
-    with open("count.json", "w") as f:
-        json.dump({"total": total}, f)
-
-
-def main():
-
-    photos, videos, likes = get_counts()
-
-    total = photos + videos
-
-    prev = load_previous()
-    old_total = prev["total"]
-
-    if total > old_total:
-
-        msg = (
-            f"<:ologo:1480256858844303582> <@{DISCORD_USER}>\n"
-            f"📸 {photos}\n"
-            f"🎬 {videos}\n"
-            f"❤️ {likes}"
-        )
-
-        send_discord(msg)
-
-    else:
-        log("No updates")
-
-    save_current(total)
-
-
-if __name__ == "__main__":
-    main()
+with open(STATE_FILE, "w") as f:
+    json.dump(state, f)
