@@ -61,9 +61,20 @@ def download_gif(gif_id, url, token):
 # =========================
 # Discord
 # =========================
-def send_to_discord(file_path):
-    with open(file_path, "rb") as f:
-        requests.post(WEBHOOK, files={"file": f})
+def send_to_discord(file_path, gif_id):
+    # intentar enviar archivo
+    try:
+        if os.path.getsize(file_path) < 8 * 1024 * 1024:
+            with open(file_path, "rb") as f:
+                requests.post(WEBHOOK, files={"file": f})
+        else:
+            raise Exception("Archivo grande")
+    
+    except:
+        # fallback: enviar link
+        requests.post(WEBHOOK, json={
+            "content": f"https://www.redgifs.com/watch/{gif_id}"
+        })
 
 # =========================
 # MAIN
