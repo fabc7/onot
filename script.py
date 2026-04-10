@@ -2,6 +2,7 @@ import os
 import time
 import json
 import requests
+import subprocess
 
 USERNAME = os.getenv("RG_USERNAME")
 WEBHOOK = os.getenv("DISCORD_WEBHOOK_URL")
@@ -33,6 +34,22 @@ def get_token():
     print("Token response keys:", data.keys())
     return data["token"]
 
+def compress_video(input_file, output_file):
+    print("Compressing video...")
+    
+    cmd = [
+        "ffmpeg",
+        "-i", input_file,
+        "-vcodec", "libx264",
+        "-crf", "28",          # 🔥 clave (menor = más calidad)
+        "-preset", "fast",
+        "-acodec", "aac",
+        "-b:a", "96k",
+        output_file
+    ]
+    
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
 # =========================
 # Obtener gifs
 # =========================
@@ -100,22 +117,30 @@ def download_gif(gif_id, url, token):
 # Discord
 # =========================
 def send_to_discord(file_path, gif_id):
-    print("Sending to Discord...")
-    
     size = os.path.getsize(file_path)
-    print(f"File size: {size/1024/1024:.2f} MB")
     
     if size < 8 * 1024 * 1024:
-        print("Sending file...")
+        print("Sending original...")
         with open(file_path, "rb") as f:
-            r = requests.post(WEBHOOK, files={"file": f})
-            print("Discord file status:", r.status_code)
+            requests.post(WEBHOOK, files={"file": f})
+        return
+    
+    # intentar comprimir
+    compressed = f"compressed_{gif_id}.mp4"
+    compress_video(file_path, compressed)
+    
+    new_size = os.path.getsize(compressed)
+    print(f"Compressed size: {new_size/1024/1024:.2f} MB")
+    
+    if new_size < 8 * 1024 * 1024:
+        print("Sending compressed...")
+        with open(compressed, "rb") as f:
+            requests.post(WEBHOOK, files={"file": f})
     else:
-        print("File too big, sending link instead...")
-        r = requests.post(WEBHOOK, json={
+        print("Still too big → sending link")
+        requests.post(WEBHOOK, json={
             "content": f"https://www.redgifs.com/watch/{gif_id}"
         })
-        print("Discord link status:", r.status_code)
 
 # =========================
 # MAIN
