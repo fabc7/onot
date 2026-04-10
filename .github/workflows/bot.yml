@@ -1,4 +1,4 @@
-name: redgifs watcher
+name: watcher
 
 on:
   schedule:
